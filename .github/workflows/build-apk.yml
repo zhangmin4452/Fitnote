@@ -31,14 +31,53 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: 配置 AndroidX 和 Gradle 内存
+      - name: 配置 AndroidX
         working-directory: project
         run: |
+          touch gradle.properties
           echo "android.useAndroidX=true" >> gradle.properties
           echo "android.enableJetifier=true" >> gradle.properties
           echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" >> gradle.properties
           echo "org.gradle.workers.max=2" >> gradle.properties
           echo "org.gradle.parallel=false" >> gradle.properties
+
+      - name: 修复 Java Kotlin JVM 版本
+        working-directory: project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          files = list(Path(".").rglob("build.gradle")) + list(Path(".").rglob("build.gradle.kts"))
+
+          for file in files:
+              text = file.read_text()
+
+              if "build.gradle.kts" in file.name:
+                  text += """
+
+          // CI JVM target compatibility
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          """
+              else:
+                  text += """
+
+          // CI JVM target compatibility
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          """
+
+              file.write_text(text)
+              print("Patched:", file)
+          PY
 
       - name: 编译 APK
         working-directory: project
@@ -48,6 +87,7 @@ jobs:
 
       - name: 查找 APK
         run: |
+          echo "===== APK 文件 ====="
           find project -type f -name "*.apk" -print
 
       - name: 上传 APK
