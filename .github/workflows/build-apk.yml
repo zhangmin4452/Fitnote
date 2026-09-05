@@ -34,56 +34,77 @@ jobs:
       - name: 配置 Gradle
         working-directory: project
         run: |
-          touch gradle.properties
-          echo "android.useAndroidX=true" >> gradle.properties
-          echo "android.enableJetifier=true" >> gradle.properties
-          echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" >> gradle.properties
-          echo "org.gradle.workers.max=2" >> gradle.properties
-          echo "org.gradle.parallel=false" >> gradle.properties
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8
+          org.gradle.workers.max=2
+          org.gradle.parallel=false
+          EOF
 
-      - name: 修正 Java 编译版本
+      - name: 创建编译配置
         working-directory: project
         run: |
-          find . -name "build.gradle.kts" -type f -print
-          find . -name "build.gradle" -type f -print
+          cat > ci.init.gradle <<'EOF'
+          allprojects {
+              afterEvaluate { project ->
 
-          python3 - <<'PY'
-          from pathlib import Path
+                  // 强制所有 Java 编译任务使用 Java 17
+                  project.tasks.configureEach { task ->
+                      if (task instanceof JavaCompile) {
+                          task.options.release = 17
+                          task.sourceCompatibility = "17"
+                          task.targetCompatibility = "17"
+                      }
 
-          files = list(Path(".").rglob("build.gradle.kts")) + list(Path(".").rglob("build.gradle"))
+                      // 不直接引用 KotlinCompile 类，
+                      // 避免不同 Kotlin 插件版本导致初始化脚本报错
+                      if (task.name.toLowerCase().contains("kotlin")) {
+                          try {
+                              task.kotlinOptions.jvmTarget = "17"
+                          } catch (Exception ignored) {
+                          }
+                      }
+                  }
 
-          for p in files:
-              s = p.read_text()
+                  // Android 项目强制 Java 17
+                  def androidExtension = project.extensions.findByName("android")
 
-              s = s.replace(
-                  "sourceCompatibility = JavaVersion.VERSION_1_8",
-                  "sourceCompatibility = JavaVersion.VERSION_17"
-              )
+                  if (androidExtension != null) {
+                      try {
+                          androidExtension.compileOptions {
+                              sourceCompatibility JavaVersion.VERSION_17
+                              targetCompatibility JavaVersion.VERSION_17
+                          }
+                      } catch (Exception ignored) {
+                      }
+                  }
+              }
+          }
+          EOF
 
-              s = s.replace(
-                  "targetCompatibility = JavaVersion.VERSION_1_8",
-                  "targetCompatibility = JavaVersion.VERSION_17"
-              )
+      - name: 检查 Java 和 Kotlin 配置
+        working-directory: project
+        run: |
+          echo "===== Java 版本 ====="
+          java -version
 
-              s = s.replace(
-                  "sourceCompatibility JavaVersion.VERSION_1_8",
-                  "sourceCompatibility JavaVersion.VERSION_17"
-              )
+          echo "===== Gradle 版本 ====="
+          gradle --version
 
-              s = s.replace(
-                  "targetCompatibility JavaVersion.VERSION_1_8",
-                  "targetCompatibility JavaVersion.VERSION_17"
-              )
-
-              p.write_text(s)
-              print("已处理:", p)
-          PY
+          echo "===== 项目文件 ====="
+          find . -maxdepth 3 -type f \
+            \( -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            -print
 
       - name: 编译 APK
         working-directory: project
         run: |
           gradle --stop || true
-          gradle assembleDebug --no-daemon --stacktrace
+          gradle assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --init-script ci.init.gradle
 
       - name: 查找 APK
         run: |
