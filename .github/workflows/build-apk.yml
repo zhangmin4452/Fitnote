@@ -41,11 +41,55 @@ jobs:
           echo "org.gradle.workers.max=2" >> gradle.properties
           echo "org.gradle.parallel=false" >> gradle.properties
 
+      - name: 修正 Java 编译版本
+        working-directory: project
+        run: |
+          find . -name "build.gradle.kts" -type f -print
+          find . -name "build.gradle" -type f -print
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          files = list(Path(".").rglob("build.gradle.kts")) + list(Path(".").rglob("build.gradle"))
+
+          for p in files:
+              s = p.read_text()
+
+              s = s.replace(
+                  "sourceCompatibility = JavaVersion.VERSION_1_8",
+                  "sourceCompatibility = JavaVersion.VERSION_17"
+              )
+
+              s = s.replace(
+                  "targetCompatibility = JavaVersion.VERSION_1_8",
+                  "targetCompatibility = JavaVersion.VERSION_17"
+              )
+
+              s = s.replace(
+                  "sourceCompatibility JavaVersion.VERSION_1_8",
+                  "sourceCompatibility JavaVersion.VERSION_17"
+              )
+
+              s = s.replace(
+                  "targetCompatibility JavaVersion.VERSION_1_8",
+                  "targetCompatibility JavaVersion.VERSION_17"
+              )
+
+              p.write_text(s)
+              print("已处理:", p)
+          PY
+
       - name: 编译 APK
         working-directory: project
         run: |
           gradle --stop || true
           gradle assembleDebug --no-daemon --stacktrace
+
+      - name: 查找 APK
+        run: |
+          echo "===== APK 文件 ====="
+          find project -type f -name "*.apk" -print
+
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
