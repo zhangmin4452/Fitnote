@@ -14,15 +14,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 检查项目压缩包
-        run: |
-          ls -lah
-          test -f FitNote-GitHub-APK.zip
-
       - name: 解压项目
         run: |
-          mkdir -p project
+          mkdir project
           unzip -o FitNote-GitHub-APK.zip -d project
+
+      - name: 开启 AndroidX
+        run: |
+          echo "android.useAndroidX=true" > project/gradle.properties
+          echo "android.enableJetifier=true" >> project/gradle.properties
 
       - name: 设置 JDK
         uses: actions/setup-java@v4
