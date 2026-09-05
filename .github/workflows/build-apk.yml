@@ -1,6 +1,9 @@
 name: Build FitNote APK
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -11,9 +14,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: 检查项目压缩包
+        run: |
+          ls -lah
+          test -f FitNote-GitHub-APK.zip
+
       - name: 解压项目
         run: |
-          mkdir project
+          mkdir -p project
           unzip -o FitNote-GitHub-APK.zip -d project
 
       - name: 设置 JDK
