@@ -31,7 +31,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: 配置 AndroidX
+      - name: 配置 Gradle
         working-directory: project
         run: |
           touch gradle.properties
@@ -41,49 +41,47 @@ jobs:
           echo "org.gradle.workers.max=2" >> gradle.properties
           echo "org.gradle.parallel=false" >> gradle.properties
 
-      - name: 修复 Java Kotlin JVM 版本
+      - name: 创建 CI 编译配置
         working-directory: project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          cat > ci.init.gradle <<'EOF'
+          allprojects {
+              afterEvaluate { project ->
 
-          files = list(Path(".").rglob("build.gradle")) + list(Path(".").rglob("build.gradle.kts"))
+                  if (project.plugins.hasPlugin("com.android.application") ||
+                      project.plugins.hasPlugin("com.android.library")) {
 
-          for file in files:
-              text = file.read_text()
+                      def androidExtension = project.extensions.findByName("android")
 
-              if "build.gradle.kts" in file.name:
-                  text += """
+                      if (androidExtension != null) {
+                          androidExtension.compileOptions {
+                              sourceCompatibility JavaVersion.VERSION_17
+                              targetCompatibility JavaVersion.VERSION_17
+                          }
+                      }
+                  }
 
-          // CI JVM target compatibility
-          android {
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
+                  project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                      kotlinOptions {
+                          jvmTarget = "17"
+                      }
+                  }
+
+                  project.tasks.withType(JavaCompile).configureEach {
+                      options.release = 17
+                  }
               }
           }
-          """
-              else:
-                  text += """
-
-          // CI JVM target compatibility
-          android {
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-          """
-
-              file.write_text(text)
-              print("Patched:", file)
-          PY
+          EOF
 
       - name: 编译 APK
         working-directory: project
         run: |
           gradle --stop || true
-          gradle assembleDebug --no-daemon --stacktrace
+          gradle assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --init-script ci.init.gradle
 
       - name: 查找 APK
         run: |
