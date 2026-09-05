@@ -1,0 +1,38 @@
+name: Build FitNote APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 解压项目
+        run: |
+          mkdir project
+          unzip -o FitNote-GitHub-APK.zip -d project
+
+      - name: 设置 JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 设置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: 编译 APK
+        working-directory: project
+        run: gradle assembleDebug
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitNote-APK
+          path: project/app/build/outputs/apk/debug/app-debug.apk
