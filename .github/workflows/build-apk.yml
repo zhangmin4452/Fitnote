@@ -41,53 +41,11 @@ jobs:
           echo "org.gradle.workers.max=2" >> gradle.properties
           echo "org.gradle.parallel=false" >> gradle.properties
 
-      - name: 创建 CI 编译配置
-        working-directory: project
-        run: |
-          cat > ci.init.gradle <<'EOF'
-          allprojects {
-              afterEvaluate { project ->
-
-                  if (project.plugins.hasPlugin("com.android.application") ||
-                      project.plugins.hasPlugin("com.android.library")) {
-
-                      def androidExtension = project.extensions.findByName("android")
-
-                      if (androidExtension != null) {
-                          androidExtension.compileOptions {
-                              sourceCompatibility JavaVersion.VERSION_17
-                              targetCompatibility JavaVersion.VERSION_17
-                          }
-                      }
-                  }
-
-                  project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                      kotlinOptions {
-                          jvmTarget = "17"
-                      }
-                  }
-
-                  project.tasks.withType(JavaCompile).configureEach {
-                      options.release = 17
-                  }
-              }
-          }
-          EOF
-
       - name: 编译 APK
         working-directory: project
         run: |
           gradle --stop || true
-          gradle assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --init-script ci.init.gradle
-
-      - name: 查找 APK
-        run: |
-          echo "===== APK 文件 ====="
-          find project -type f -name "*.apk" -print
-
+          gradle assembleDebug --no-daemon --stacktrace
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
