@@ -1,10 +1,10 @@
 name: Build FitNote APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build:
@@ -16,15 +16,11 @@ jobs:
 
       - name: 解压项目
         run: |
+          rm -rf project
           mkdir project
           unzip -o FitNote-GitHub-APK.zip -d project
 
-      - name: 开启 AndroidX
-        run: |
-          echo "android.useAndroidX=true" > project/gradle.properties
-          echo "android.enableJetifier=true" >> project/gradle.properties
-
-      - name: 设置 JDK
+      - name: 设置 JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,12 +31,28 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: 配置 AndroidX 和 Gradle 内存
+        working-directory: project
+        run: |
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" >> gradle.properties
+          echo "org.gradle.workers.max=2" >> gradle.properties
+          echo "org.gradle.parallel=false" >> gradle.properties
+
       - name: 编译 APK
         working-directory: project
-        run: gradle assembleDebug
+        run: |
+          gradle --stop || true
+          gradle assembleDebug --no-daemon --stacktrace
+
+      - name: 查找 APK
+        run: |
+          find project -type f -name "*.apk" -print
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: FitNote-APK
           path: project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
